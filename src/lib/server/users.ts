@@ -1,29 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
 
-import { db, getUserRole, removeUserRole, setUserRole } from "@/lib/db";
+import { countAdmins, db, getUserRole, removeWhere, setUserRole } from "@/lib/db";
+import { httpError } from "@/lib/errors";
+import { userIdSchema, userRoleInputSchema } from "@/lib/schemas";
 import { requireAdmin } from "@/lib/session";
+import { validator } from "@/lib/validate";
 
-const userIdSchema = z.string().min(1, "Invalid user id").max(128, "Invalid user id");
-
-export const userRoleSchema = z.object({
-	userId: userIdSchema,
-	role: z.enum(["admin", "user"]),
-});
-
-function httpError(message: string, status: number) {
-	return Object.assign(new Error(message), { status });
-}
-
-function countAdmins() {
-	return db.user.filter((u) => getUserRole(u.id) === "admin").length;
-}
-
-function purgeByUserId(list: unknown[], userId: string) {
-	for (let i = list.length - 1; i >= 0; i--) {
-		if ((list[i] as { userId?: string }).userId === userId) list.splice(i, 1);
-	}
-}
+// Administrator-only. Guardrails that protect the app from locking itself out
+// are enforced HERE, on the server, because the UI checks can be bypassed:
+//   1. You cannot change your own role.
+//   2. You cannot delete your own account.
+//   3. The last remaining administrator cannot be demoted or deleted.
 
 export const getUsers = createServerFn({ method: "GET" }).handler(async () => {
 	await requireAdmin();
@@ -38,49 +25,49 @@ export const getUsers = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export const updateUserRole = createServerFn({ method: "POST" })
-	.validator(userRoleSchema)
+	.validator(validator(userRoleInputSchema))
 	.handler(async ({ data }) => {
 		const { user: actor } = await requireAdmin();
 
 		const target = db.user.find((u) => u.id === data.userId);
-		if (!target) throw httpError("User not found", 404);
-
-		const current = getUserRole(target.id);
-		if (current === data.role) return { ok: true };
-
-		// Admin tidak boleh menurunkan dirinya sendiri (mencegah salah klik / lockout).
-		if (actor.id === target.id && data.role !== "admin") {
-			throw httpError("You cannot remove your own admin role", 400);
+		if (!target) {
+			throw httpError(404, "User not found.");
 		}
-		// Selalu sisakan minimal satu admin.
-		if (current === "admin" && data.role !== "admin" && countAdmins() <= 1) {
-			throw httpError("Cannot demote the last administrator", 400);
+		const currentRole = getUserRole(target.id);
+		if (currentRole === data.role) {
+			return { ok: true, role: data.role };
+		}
+		if (target.id === actor.id) {
+			throw httpError(400, "You cannot change your own role.");
+		}
+		if (currentRole === "admin" && countAdmins() <= 1) {
+			throw httpError(400, "Cannot demote the last administrator. Promote another user first.");
 		}
 
 		setUserRole(target.id, data.role);
-		return { ok: true };
+		return { ok: true, role: data.role };
 	});
 
 export const deleteUser = createServerFn({ method: "POST" })
-	.validator(z.object({ userId: userIdSchema }))
+	.validator(validator(userIdSchema))
 	.handler(async ({ data }) => {
 		const { user: actor } = await requireAdmin();
 
-		if (actor.id === data.userId) {
-			throw httpError("You cannot delete your own account", 400);
+		if (data.userId === actor.id) {
+			throw httpError(400, "You cannot delete your own account.");
+		}
+		const target = db.user.find((u) => u.id === data.userId);
+		if (!target) {
+			throw httpError(404, "User not found.");
+		}
+		if (getUserRole(target.id) === "admin" && countAdmins() <= 1) {
+			throw httpError(400, "Cannot delete the last administrator.");
 		}
 
-		const index = db.user.findIndex((u) => u.id === data.userId);
-		if (index === -1) throw httpError("User not found", 404);
-
-		if (getUserRole(data.userId) === "admin" && countAdmins() <= 1) {
-			throw httpError("Cannot delete the last administrator", 400);
-		}
-
-		db.user.splice(index, 1);
-		// Cabut semua sesi dan kredensial milik user itu supaya langsung tidak bisa masuk lagi.
-		purgeByUserId(db.session, data.userId);
-		purgeByUserId(db.account, data.userId);
-		removeUserRole(data.userId);
+		// Remove everything tied to the account so it cannot sign back in.
+		removeWhere(db.user, (u) => u.id === data.userId);
+		removeWhere(db.account, (a) => a.userId === data.userId);
+		removeWhere(db.session, (s) => s.userId === data.userId);
+		removeWhere(db.userRole, (r) => r.userId === data.userId);
 		return { ok: true };
 	});

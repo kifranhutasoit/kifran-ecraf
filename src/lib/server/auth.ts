@@ -1,90 +1,79 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { auth } from "@/lib/auth";
-import {
-	type Product,
-	SEED_ADMIN_EMAIL,
-	SEED_ADMIN_PASSWORD,
-	db,
-	getUserRole,
-	setUserRole,
-} from "@/lib/db";
+import { countAdmins, db, getUserRole } from "@/lib/db";
+import { httpError } from "@/lib/errors";
 import { getCurrentSession } from "@/lib/session";
 
 /**
- * Server-only session lookup. Aman dipanggil dari `beforeLoad` karena server
- * function selalu berjalan di server. Mengembalikan role dari store server,
- * jadi client tidak bisa memalsukannya.
+ * Server-only session lookup. Used by route `beforeLoad` guards and the
+ * sidebar shell. It returns the server-side role so the UI can hide admin-only
+ * controls. Hiding is cosmetic; every mutation still checks the role itself.
  */
 export const getServerSession = createServerFn({ method: "GET" }).handler(async () => {
-	const { session, user } = await getCurrentSession();
-	return {
-		session,
-		user,
-		role: user ? getUserRole(user.id) : null,
-	};
+	return getCurrentSession();
 });
 
-type SeedResult = { ok: true; alreadySeeded: boolean; admin: string };
-
-const SAMPLE_PRODUCTS = [
-	{ name: "Starter Kit", description: "Everything you need to begin.", price: 49, stock: 12 },
-	{ name: "Pro Plan", description: "For growing teams.", price: 149, stock: 5 },
-	{ name: "Enterprise", description: "Self-hosted, full support.", price: 499, stock: 1 },
-];
-
-async function runSeed(): Promise<SeedResult> {
-	const hasAdmin = db.user.some((u) =>
-		db.userRole.some((r) => r.userId === u.id && r.role === "admin"),
-	);
-	if (hasAdmin) {
-		return { ok: true, alreadySeeded: true, admin: SEED_ADMIN_EMAIL };
+/**
+ * One-time setup: creates the administrator account and sample products.
+ *
+ * - Idempotent: does nothing once an administrator exists.
+ * - The password is NEVER in source code or in the UI. It comes from the
+ *   SEED_ADMIN_PASSWORD environment variable (see .env.example). If it is not
+ *   set, seeding refuses to run.
+ * - Creating an admin without knowing the password is useless: the attacker
+ *   would not know the password the operator configured.
+ */
+export const seedAdmin = createServerFn({ method: "POST" }).handler(async () => {
+	const alreadySeeded = db.user.some((u) => getUserRole(u.id) === "admin");
+	if (alreadySeeded) {
+		return { ok: true, alreadySeeded: true };
 	}
 
-	// Sign-up publik terbuka. Kalau email seed sudah didaftarkan orang lain sebelum
-	// /setup dijalankan, JANGAN dipromosikan jadi admin (privilege escalation).
-	if (db.user.some((u) => u.email === SEED_ADMIN_EMAIL)) {
-		throw new Error(
-			`${SEED_ADMIN_EMAIL} is already registered without admin rights. Restart the dev server to reset the in-memory data, then run /setup again.`,
+	const password = process.env.SEED_ADMIN_PASSWORD ?? "";
+	if (password.length < 10) {
+		throw httpError(
+			500,
+			"Setup is not configured. Set SEED_ADMIN_PASSWORD (at least 10 characters) in .env.local, then restart the server.",
 		);
 	}
+	const email = (process.env.SEED_ADMIN_EMAIL || "admin@example.com").trim().toLowerCase();
 
 	await auth.api.signUpEmail({
-		body: { email: SEED_ADMIN_EMAIL, password: SEED_ADMIN_PASSWORD, name: "Administrator" },
+		body: {
+			email,
+			password,
+			name: "Administrator",
+		},
 		headers: new Headers(),
 	});
 
-	const adminUser = db.user.find((u) => u.email === SEED_ADMIN_EMAIL);
+	const adminUser = db.user.find((u) => u.email === email);
 	if (!adminUser) {
-		throw new Error("Failed to create the admin account");
+		throw httpError(500, "Admin account could not be created.");
 	}
-	setUserRole(adminUser.id, "admin");
+	const existing = db.userRole.find((r) => r.userId === adminUser.id);
+	if (existing) {
+		existing.role = "admin";
+	} else {
+		db.userRole.push({ userId: adminUser.id, role: "admin" });
+	}
 
-	if (db.product.length === 0) {
-		const now = new Date().toISOString();
-		const products: Product[] = SAMPLE_PRODUCTS.map((p) => ({
+	const now = new Date().toISOString();
+	const samples = [
+		{ name: "Starter Kit", description: "Everything you need to begin.", price: 49, stock: 12 },
+		{ name: "Pro Plan", description: "For growing teams.", price: 149, stock: 5 },
+		{ name: "Enterprise", description: "Self-hosted, full support.", price: 499, stock: 1 },
+	];
+	db.product.push(
+		...samples.map((p) => ({
 			id: crypto.randomUUID(),
 			...p,
-			image: null,
+			imageUrl: null,
 			createdAt: now,
 			updatedAt: now,
-		}));
-		db.product.push(...products);
-	}
+		})),
+	);
 
-	return { ok: true, alreadySeeded: false, admin: SEED_ADMIN_EMAIL };
-}
-
-// Satu proses seed bersama: klik ganda / dua request bersamaan tidak membuat race.
-let seeding: Promise<SeedResult> | null = null;
-
-/**
- * Seed development satu kali (idempotent): akun admin + produk contoh.
- * Dipanggil dari halaman /setup lewat `useServerFn(seedAdmin)`.
- */
-export const seedAdmin = createServerFn({ method: "POST" }).handler(async () => {
-	seeding ??= runSeed().finally(() => {
-		seeding = null;
-	});
-	return seeding;
+	return { ok: true, alreadySeeded: false, admin: email, adminCount: countAdmins() };
 });

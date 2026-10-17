@@ -1,46 +1,42 @@
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { LogOut } from "lucide-react";
+import { useState } from "react";
 
 import { authClient } from "#/lib/auth-client";
 
-const btn =
-	"inline-flex h-9 items-center rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] px-4 text-sm font-semibold text-[var(--sea-ink)] no-underline transition hover:bg-[var(--link-bg-hover)]";
-
-export default function BetterAuthHeader() {
-	const { data: session, isPending } = authClient.useSession();
-	const router = useRouter();
-	const navigate = useNavigate();
-	const queryClient = useQueryClient();
-
-	if (isPending) {
-		return <div className="h-9 w-24 animate-pulse rounded-xl bg-[var(--chip-bg)]" />;
-	}
-
-	if (session?.user) {
-		return (
-			<div className="flex items-center gap-2">
-				<Link to="/dashboard" className={btn}>
-					Dashboard
-				</Link>
-				<button
-					type="button"
-					className={btn}
-					onClick={async () => {
-						await authClient.signOut();
-						queryClient.clear();
-						await router.invalidate();
-						await navigate({ to: "/login" });
-					}}
-				>
-					Sign out
-				</button>
-			</div>
-		);
-	}
-
+export function UserAvatar({ name, email }: { name?: string | null; email?: string | null }) {
+	const initial = (name || email || "?").trim().charAt(0).toUpperCase();
 	return (
-		<Link to="/login" className={btn}>
-			Sign in
-		</Link>
+		<span
+			aria-hidden="true"
+			className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--chip-bg)] text-xs font-bold text-[var(--sea-ink)] ring-1 ring-[var(--chip-line)]"
+		>
+			{initial}
+		</span>
+	);
+}
+
+/** Sign-out button. Full reload afterwards so every server guard re-runs. */
+export function SignOutButton({ className }: { className?: string }) {
+	const [busy, setBusy] = useState(false);
+	return (
+		<button
+			type="button"
+			disabled={busy}
+			onClick={async () => {
+				setBusy(true);
+				try {
+					await authClient.signOut();
+				} finally {
+					window.location.assign("/login");
+				}
+			}}
+			className={
+				className ??
+				"inline-flex h-9 items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 text-sm font-semibold text-[var(--sea-ink)] transition hover:bg-[var(--link-bg-hover)] disabled:opacity-60 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+			}
+		>
+			<LogOut className="size-4" aria-hidden="true" />
+			{busy ? "Signing out…" : "Sign out"}
+		</button>
 	);
 }
