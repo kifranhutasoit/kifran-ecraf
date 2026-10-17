@@ -1,0 +1,46 @@
+{
+	"$schema": "https://biomejs.dev/schemas/1.9/biome.json",
+	"organizeImports": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"complexity": {
+				"noForEach": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off"
+			}
+		}
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"lineWidth": 100
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"semicolons": "always",
+			"arrowParentheses": "always",
+			"bracketSameLine": false,
+			"attributePosition": "auto"
+		}
+	},
+	"files": {
+		"ignore": [
+			"node_modules",
+			"dist",
+			"dist-ssr",
+			".output",
+			".nitro",
+			".tanstack",
+			"routeTree.gen.ts",
+			"*.local",
+			".env",
+			".env.local"
+		]
+	}
+}
