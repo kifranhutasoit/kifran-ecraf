@@ -1,324 +1,327 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, Package, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
-
-import { ProductFormModal } from "@/components/ProductFormModal";
-import { Button } from "@/components/ui/button";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
+	createColumnHelper,
+	createSortedRowModel,
+	flexRender,
+	rowSortingFeature,
+	tableFeatures,
+	useTable,
+} from "@tanstack/react-table";
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ProductFormModal } from "@/components/ProductFormModal";
+import { ProductThumb, StockBadge } from "@/components/product-bits";
+import { EmptyState, ErrorState, Notice, PageHeader, SkeletonRows } from "@/components/states";
+import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/db";
+import { formatPrice } from "@/lib/format";
+import { PRODUCTS_QUERY_KEY } from "@/lib/query-keys";
 import { deleteProduct, getProducts } from "@/lib/server/products";
 
+// The create/edit modals are driven by the URL (?new=1 or ?edit=<id>), so a
+// refresh or a shared link reopens the same dialog.
+type ProductsSearch = { new?: true; edit?: string };
+
 export const Route = createFileRoute("/_admin/products/")({
+	validateSearch: (search: Record<string, unknown>): ProductsSearch => {
+		const out: ProductsSearch = {};
+		if (search.new === true || search.new === "1" || search.new === "true") out.new = true;
+		if (typeof search.edit === "string" && search.edit.length > 0) out.edit = search.edit;
+		return out;
+	},
 	component: ProductsPage,
 });
 
-type SortKey = "name" | "price" | "stock";
-type SortDir = "asc" | "desc";
+type FlashMessage = { tone: "success" | "error"; text: string };
 
-const formatPrice = (n: number) => n.toLocaleString("id-ID", { maximumFractionDigits: 2 });
-
-function SortHeader({
-	label,
-	k,
-	sortKey,
-	sortDir,
-	onToggle,
-}: {
-	label: string;
-	k: SortKey;
-	sortKey: SortKey;
-	sortDir: SortDir;
-	onToggle: (key: SortKey) => void;
-}) {
-	const active = sortKey === k;
-	return (
-		<button
-			type="button"
-			onClick={() => onToggle(k)}
-			className="inline-flex items-center gap-1 font-semibold hover:underline"
-		>
-			{label}
-			{active && (sortDir === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
-		</button>
-	);
-}
-
-function ProductThumb({ product }: { product: Product }) {
-	if (!product.image) {
-		return (
-			<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--chip-bg)] text-[var(--sea-ink-soft)]">
-				<Package size={20} />
-			</div>
-		);
-	}
-	return (
-		<img
-			src={product.image}
-			alt={product.name}
-			referrerPolicy="no-referrer"
-			className="h-12 w-12 shrink-0 rounded-lg object-cover"
-		/>
-	);
-}
+// The sorted row model must be registered, otherwise the sort state changes
+// (arrows update) but the rows are never reordered.
+const features = tableFeatures({
+	rowSortingFeature,
+	sortedRowModel: createSortedRowModel(),
+});
+const columnHelper = createColumnHelper<typeof features, Product>();
 
 function ProductsPage() {
-	const queryClient = useQueryClient();
 	const { role } = Route.useRouteContext();
+	const { new: creating, edit: editingId } = Route.useSearch();
 	const isAdmin = role === "admin";
-
-	const [sortKey, setSortKey] = useState<SortKey>("name");
-	const [sortDir, setSortDir] = useState<SortDir>("asc");
-	const [formOpen, setFormOpen] = useState(false);
-	const [editing, setEditing] = useState<Product | null>(null);
-	const [deleting, setDeleting] = useState<Product | null>(null);
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 
 	const productsQuery = useQuery({
-		queryKey: ["products"],
-		queryFn: async () => getProducts(),
+		queryKey: PRODUCTS_QUERY_KEY,
+		queryFn: () => getProducts(),
 	});
+	const products = productsQuery.data ?? [];
+	const deleteFn = useServerFn(deleteProduct);
 
-	const refresh = () => {
-		queryClient.invalidateQueries({ queryKey: ["products"] });
-		queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-	};
+	const [notice, setNotice] = useState<FlashMessage | null>(null);
+	const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+
+	const editing = editingId ? (products.find((p) => p.id === editingId) ?? null) : null;
+	const modalOpen = isAdmin && (!!creating || !!editing);
+
+	const openCreate = () => navigate({ to: "/products", search: { new: true } });
+	const openEdit = (product: Product) =>
+		navigate({ to: "/products", search: { edit: product.id } });
+	const closeModal = () => navigate({ to: "/products", search: {}, replace: true });
 
 	const deleteMutation = useMutation({
-		mutationFn: async (id: string) => deleteProduct({ data: { id } }),
-		onSuccess: () => {
-			setDeleting(null);
-			refresh();
+		mutationFn: (id: string) => deleteFn({ data: { id } }),
+		onSuccess: async () => {
+			setPendingDelete(null);
+			setNotice({ tone: "success", text: "Product deleted." });
+			await queryClient.invalidateQueries({ queryKey: PRODUCTS_QUERY_KEY });
+		},
+		onError: (err) => {
+			setPendingDelete(null);
+			setNotice({ tone: "error", text: err instanceof Error ? err.message : "Delete failed." });
 		},
 	});
 
-	const products = useMemo(() => {
-		const list = [...(productsQuery.data ?? [])];
-		list.sort((a, b) => {
-			const av = a[sortKey];
-			const bv = b[sortKey];
-			const result =
-				typeof av === "string" && typeof bv === "string"
-					? av.localeCompare(bv)
-					: Number(av) - Number(bv);
-			return sortDir === "asc" ? result : -result;
-		});
-		return list;
-	}, [productsQuery.data, sortKey, sortDir]);
+	const columns = columnHelper.columns([
+		columnHelper.accessor("name", {
+			header: "Product",
+			cell: (info) => (
+				<div className="flex min-w-0 items-center gap-3">
+					<ProductThumb src={info.row.original.imageUrl} />
+					<span className="truncate font-semibold text-[var(--sea-ink)]">{info.getValue()}</span>
+				</div>
+			),
+		}),
+		columnHelper.accessor("description", {
+			header: "Description",
+			cell: (info) => (
+				<span className="line-clamp-2 text-[var(--sea-ink-soft)]">{info.getValue()}</span>
+			),
+		}),
+		columnHelper.accessor("price", {
+			header: "Price",
+			cell: (info) => formatPrice(info.getValue()),
+		}),
+		columnHelper.accessor("stock", {
+			header: "Stock",
+			cell: (info) => <StockBadge value={info.getValue()} />,
+		}),
+		columnHelper.display({
+			id: "actions",
+			header: "",
+			cell: (info) =>
+				isAdmin ? (
+					<div className="flex justify-end gap-2">
+						<Button variant="outline" size="sm" onClick={() => openEdit(info.row.original)}>
+							<Pencil className="size-3.5" aria-hidden="true" />
+							Edit
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className="text-red-600 hover:text-red-700 dark:text-red-400"
+							onClick={() => setPendingDelete(info.row.original)}
+						>
+							<Trash2 className="size-3.5" aria-hidden="true" />
+							Delete
+						</Button>
+					</div>
+				) : null,
+		}),
+	]);
 
-	function toggleSort(key: SortKey) {
-		if (key === sortKey) {
-			setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-		} else {
-			setSortKey(key);
-			setSortDir("asc");
-		}
-	}
-
-	function openCreate() {
-		setEditing(null);
-		setFormOpen(true);
-	}
-
-	function openEdit(product: Product) {
-		setEditing(product);
-		setFormOpen(true);
-	}
-
-	const sortProps = { sortKey, sortDir, onToggle: toggleSort };
+	const table = useTable({
+		features,
+		columns,
+		data: products,
+	});
 
 	return (
-		<main className="page-wrap px-4 py-12">
-			<section className="island-shell rounded-2xl p-6 sm:p-8">
-				<div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-					<div>
-						<p className="island-kicker mb-2">Products</p>
-						<h1 className="display-title mb-1 text-3xl font-bold text-[var(--sea-ink)] sm:text-4xl">
-							Products
-						</h1>
-						<p className="m-0 text-[var(--sea-ink-soft)]">
-							Manage your catalogue. Changes are validated on the server.
-						</p>
-					</div>
-					{isAdmin && (
+		<>
+			<PageHeader
+				kicker="Catalogue"
+				title="Products"
+				description={
+					isAdmin
+						? `${products.length} ${products.length === 1 ? "product" : "products"}. Click a column to sort.`
+						: "Read-only view. Ask an administrator to make changes."
+				}
+				actions={
+					isAdmin && (
 						<Button onClick={openCreate}>
-							<Plus size={16} className="mr-1" /> Add product
+							<Plus aria-hidden="true" />
+							Add product
 						</Button>
-					)}
+					)
+				}
+			/>
+
+			{notice && (
+				<div className="mb-4">
+					<Notice tone={notice.tone} onDismiss={() => setNotice(null)}>
+						{notice.text}
+					</Notice>
 				</div>
+			)}
 
-				{productsQuery.isPending && (
-					<p className="text-sm text-[var(--sea-ink-soft)]">Loading products…</p>
-				)}
-
-				{productsQuery.isError && (
-					<div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-600">
-						Failed to load products: {(productsQuery.error as Error).message}
-						<div className="mt-2">
-							<Button variant="outline" size="sm" onClick={() => productsQuery.refetch()}>
-								Try again
+			{productsQuery.isPending ? (
+				<SkeletonRows rows={5} />
+			) : productsQuery.isError ? (
+				<ErrorState
+					message={`Could not load products. ${(productsQuery.error as Error).message}`}
+					onRetry={() => void productsQuery.refetch()}
+				/>
+			) : products.length === 0 ? (
+				<EmptyState
+					title="No products yet"
+					description={
+						isAdmin
+							? "Create the first product to start the catalogue."
+							: "Nothing has been added yet."
+					}
+					action={
+						isAdmin && (
+							<Button onClick={openCreate}>
+								<Plus aria-hidden="true" />
+								Add product
 							</Button>
-						</div>
-					</div>
-				)}
-
-				{productsQuery.isSuccess && products.length === 0 && (
-					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--line)] p-10 text-center">
-						<Package size={32} className="text-[var(--sea-ink-soft)]" />
-						<p className="m-0 font-medium text-[var(--sea-ink)]">No products yet</p>
-						<p className="m-0 text-sm text-[var(--sea-ink-soft)]">
-							{isAdmin ? "Click “Add product” to create the first one." : "Nothing to show."}
-						</p>
-					</div>
-				)}
-
-				{products.length > 0 && (
-					<>
-						{/* Desktop: tabel */}
-						<div className="hidden overflow-x-auto md:block">
-							<table className="w-full text-left text-sm text-[var(--sea-ink)]">
-								<thead>
-									<tr className="border-b border-[var(--line)]">
-										<th className="py-3 pr-4">Image</th>
-										<th className="py-3 pr-4">
-											<SortHeader label="Name" k="name" {...sortProps} />
-										</th>
-										<th className="py-3 pr-4">Description</th>
-										<th className="py-3 pr-4">
-											<SortHeader label="Price" k="price" {...sortProps} />
-										</th>
-										<th className="py-3 pr-4">
-											<SortHeader label="Stock" k="stock" {...sortProps} />
-										</th>
-										{isAdmin && <th className="py-3 text-right">Actions</th>}
+						)
+					}
+				/>
+			) : (
+				<>
+					{/* Desktop: sortable table */}
+					<div className="hidden overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] md:block">
+						<table className="w-full border-collapse text-sm">
+							<thead className="bg-[var(--chip-bg)]">
+								{table.getHeaderGroups().map((headerGroup) => (
+									<tr key={headerGroup.id}>
+										{headerGroup.headers.map((header) => {
+											const sorted = header.column.getIsSorted();
+											return (
+												<th
+													key={header.id}
+													scope="col"
+													aria-sort={
+														sorted === "asc"
+															? "ascending"
+															: sorted === "desc"
+																? "descending"
+																: undefined
+													}
+													className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-[var(--sea-ink-soft)] uppercase"
+												>
+													{header.isPlaceholder ? null : header.column.getCanSort() ? (
+														<button
+															type="button"
+															onClick={header.column.getToggleSortingHandler()}
+															className="inline-flex items-center gap-1 rounded outline-none hover:text-[var(--sea-ink)] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+														>
+															{flexRender(header.column.columnDef.header, header.getContext())}
+															{sorted === "asc" ? (
+																<ArrowUp className="size-3.5" aria-hidden="true" />
+															) : sorted === "desc" ? (
+																<ArrowDown className="size-3.5" aria-hidden="true" />
+															) : (
+																<ArrowUpDown className="size-3.5 opacity-40" aria-hidden="true" />
+															)}
+														</button>
+													) : (
+														flexRender(header.column.columnDef.header, header.getContext())
+													)}
+												</th>
+											);
+										})}
 									</tr>
-								</thead>
-								<tbody>
-									{products.map((p) => (
-										<tr key={p.id} className="border-b border-[var(--line)] align-middle">
-											<td className="py-3 pr-4">
-												<ProductThumb product={p} />
+								))}
+							</thead>
+							<tbody>
+								{table.getRowModel().rows.map((row) => (
+									<tr
+										key={row.id}
+										className="border-t border-[var(--line)] transition hover:bg-[var(--link-bg-hover)]"
+									>
+										{row.getAllCells().map((cell) => (
+											<td key={cell.id} className="px-4 py-3 align-middle">
+												{flexRender(cell.column.columnDef.cell, cell.getContext())}
 											</td>
-											<td className="py-3 pr-4 font-medium">{p.name}</td>
-											<td className="max-w-xs truncate py-3 pr-4 text-[var(--sea-ink-soft)]">
-												{p.description}
-											</td>
-											<td className="py-3 pr-4">{formatPrice(p.price)}</td>
-											<td className="py-3 pr-4">{p.stock}</td>
-											{isAdmin && (
-												<td className="py-3 text-right">
-													<div className="inline-flex gap-2">
-														<Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-															<Pencil size={14} className="mr-1" /> Edit
-														</Button>
-														<Button variant="outline" size="sm" onClick={() => setDeleting(p)}>
-															<Trash2 size={14} className="mr-1" /> Delete
-														</Button>
-													</div>
-												</td>
-											)}
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
+										))}
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
 
-						{/* Mobile: kartu */}
-						<div className="grid gap-3 md:hidden">
-							<div className="flex flex-wrap items-center gap-3 text-xs text-[var(--sea-ink-soft)]">
-								<span>Sort by:</span>
-								<SortHeader label="Name" k="name" {...sortProps} />
-								<SortHeader label="Price" k="price" {...sortProps} />
-								<SortHeader label="Stock" k="stock" {...sortProps} />
-							</div>
-							{products.map((p) => (
-								<div
-									key={p.id}
-									className="rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-4"
-								>
-									<div className="flex gap-3">
-										<ProductThumb product={p} />
+					{/* Mobile: stacked cards instead of a wide table */}
+					<ul className="grid gap-3 md:hidden">
+						{table.getRowModel().rows.map((row) => {
+							const p = row.original;
+							return (
+								<li key={row.id} className="island-shell rounded-2xl p-4">
+									<div className="flex items-start gap-3">
+										<ProductThumb src={p.imageUrl} size="size-14" />
 										<div className="min-w-0 flex-1">
-											<p className="m-0 font-semibold text-[var(--sea-ink)]">{p.name}</p>
-											<p className="m-0 mt-1 text-sm text-[var(--sea-ink-soft)]">{p.description}</p>
-											<p className="m-0 mt-2 text-sm text-[var(--sea-ink)]">
-												{formatPrice(p.price)} · Stock {p.stock}
+											<p className="m-0 truncate font-semibold text-[var(--sea-ink)]">{p.name}</p>
+											<p className="m-0 mt-0.5 line-clamp-2 text-xs text-[var(--sea-ink-soft)]">
+												{p.description}
 											</p>
 										</div>
 									</div>
+									<div className="mt-3 flex items-center justify-between gap-3">
+										<p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">
+											{formatPrice(p.price)}
+										</p>
+										<StockBadge value={p.stock} />
+									</div>
 									{isAdmin && (
-										<div className="mt-3 flex gap-2">
+										<div className="mt-4 grid grid-cols-2 gap-2">
 											<Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-												<Pencil size={14} className="mr-1" /> Edit
+												<Pencil className="size-3.5" aria-hidden="true" />
+												Edit
 											</Button>
-											<Button variant="outline" size="sm" onClick={() => setDeleting(p)}>
-												<Trash2 size={14} className="mr-1" /> Delete
+											<Button
+												variant="ghost"
+												size="sm"
+												className="text-red-600 hover:text-red-700 dark:text-red-400"
+												onClick={() => setPendingDelete(p)}
+											>
+												<Trash2 className="size-3.5" aria-hidden="true" />
+												Delete
 											</Button>
 										</div>
 									)}
-								</div>
-							))}
-						</div>
-					</>
-				)}
-			</section>
+								</li>
+							);
+						})}
+					</ul>
+				</>
+			)}
 
-			{/* Modal create / edit. `key` memaksa form dibuat ulang untuk tiap produk. */}
-			{formOpen && (
+			{isAdmin && (
 				<ProductFormModal
-					key={editing?.id ?? "new"}
-					product={editing}
-					onClose={() => {
-						setFormOpen(false);
-						setEditing(null);
-						queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+					open={modalOpen}
+					onOpenChange={(next) => {
+						if (!next) void closeModal();
 					}}
+					product={creating ? null : editing}
 				/>
 			)}
 
-			{/* Konfirmasi hapus */}
-			<Dialog
-				open={deleting !== null}
-				onOpenChange={(open) => {
-					if (!open && !deleteMutation.isPending) {
-						setDeleting(null);
-						deleteMutation.reset();
-					}
+			<ConfirmDialog
+				open={!!pendingDelete}
+				onOpenChange={(next) => {
+					if (!next) setPendingDelete(null);
 				}}
-			>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Delete product?</DialogTitle>
-						<DialogDescription>
-							“{deleting?.name}” will be permanently removed. This cannot be undone.
-						</DialogDescription>
-					</DialogHeader>
-					{deleteMutation.isError && (
-						<p className="text-sm text-red-600">{(deleteMutation.error as Error).message}</p>
-					)}
-					<DialogFooter>
-						<Button
-							variant="outline"
-							disabled={deleteMutation.isPending}
-							onClick={() => setDeleting(null)}
-						>
-							Cancel
-						</Button>
-						<Button
-							disabled={deleteMutation.isPending}
-							onClick={() => deleting && deleteMutation.mutate(deleting.id)}
-						>
-							{deleteMutation.isPending ? "Deleting…" : "Delete"}
-						</Button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
-		</main>
+				title="Delete this product?"
+				description={`“${pendingDelete?.name ?? ""}” will be removed from the catalogue. This cannot be undone.`}
+				confirmLabel="Delete product"
+				pending={deleteMutation.isPending}
+				onConfirm={() => {
+					if (pendingDelete) deleteMutation.mutate(pendingDelete.id);
+				}}
+			/>
+		</>
 	);
 }

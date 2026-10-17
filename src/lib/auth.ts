@@ -3,40 +3,42 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 
 import { adapter } from "./db";
 
-const isProd = process.env.NODE_ENV === "production";
+const isProduction = process.env.NODE_ENV === "production";
 
 export const auth = betterAuth({
 	database: adapter,
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: false,
-		minPasswordLength: 8,
+		minPasswordLength: 10,
 		maxPasswordLength: 128,
 	},
 	session: {
-		expiresIn: 60 * 60 * 24, // 1 hari (sebelumnya 7 hari)
-		updateAge: 60 * 60 * 2,
-		cookieCache: {
-			enabled: true,
-			maxAge: 60 * 5,
-		},
+		// Absolute lifetime of 1 day, refreshed at most once an hour while active.
+		expiresIn: 60 * 60 * 24,
+		updateAge: 60 * 60,
+		// No cookie cache: every request re-checks the session store, so a deleted
+		// user or signed-out session stops working immediately.
+		cookieCache: { enabled: false },
 	},
-	// Batasi brute-force: login & sign-up maksimal 5x per menit per IP.
 	rateLimit: {
 		enabled: true,
+		storage: "memory",
 		window: 60,
-		max: 60,
+		max: 100,
 		customRules: {
-			"/sign-in/email": { window: 60, max: 5 },
-			"/sign-up/email": { window: 60, max: 5 },
+			// Brute-force protection for password sign-in. better-auth counts every
+			// attempt (successful ones too), so the limit is set above normal use.
+			"/sign-in/email": { window: 15 * 60, max: 10 },
+			"/sign-up/email": { window: 60 * 60, max: 10 },
 		},
 	},
 	advanced: {
-		useSecureCookies: isProd,
 		defaultCookieAttributes: {
 			httpOnly: true,
 			sameSite: "lax",
-			secure: isProd,
+			secure: isProduction,
+			path: "/",
 		},
 	},
 	plugins: [tanstackStartCookies()],
