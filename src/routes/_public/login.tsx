@@ -99,7 +99,7 @@ function LoginPage() {
 		<main className="flex min-h-[calc(100dvh-9rem)] items-center justify-center px-4 py-12">
 			<div className="w-full max-w-md">
 				<div className="mb-6 text-center">
-					<span className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-[var(--palm)] text-white shadow-[0_12px_30px_rgba(47,106,74,0.3)]">
+					<span className="mx-auto mb-4 flex size-12 items-center justify-center rounded-tr-xl rounded-br-xl rounded-bl-xl bg-[var(--palm)] text-white shadow-[0_12px_30px_rgba(4,120,87,0.35)]">
 						<ShieldCheck className="size-6" aria-hidden="true" />
 					</span>
 					<h1 className="display-title text-3xl font-bold text-[var(--sea-ink)]">
@@ -112,7 +112,7 @@ function LoginPage() {
 					</p>
 				</div>
 
-				<section className="island-shell rounded-2xl p-6 sm:p-8">
+				<section className="island-shell rounded-lg p-6 sm:p-8">
 					<div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-[var(--chip-bg)] p-1">
 						{(["signin", "signup"] as const).map((option) => (
 							<button
@@ -122,7 +122,7 @@ function LoginPage() {
 								onClick={() => switchMode(option)}
 								className={`h-9 rounded-lg text-sm font-semibold transition outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 ${
 									mode === option
-										? "bg-[var(--foam)] text-[var(--sea-ink)] shadow-sm"
+										? "bg-[var(--surface-strong)] text-[var(--sea-ink)] shadow-sm"
 										: "text-[var(--sea-ink-soft)] hover:text-[var(--sea-ink)]"
 								}`}
 							>

@@ -10,7 +10,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 // Inline SVG favicon: no extra request and no file to host.
 const FAVICON_HREF =
-	"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%232f6a4a'/%3E%3C/svg%3E";
+	"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23047857'/%3E%3C/svg%3E";
 
 interface MyRouterContext {
 	queryClient: QueryClient;
@@ -40,7 +40,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<script src="/theme-init.js" />
 				<HeadContent />
 			</head>
-			<body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
+			<body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(5,150,105,0.25)]">
 				{children}
 				{import.meta.env.DEV && (
 					<TanStackDevtools

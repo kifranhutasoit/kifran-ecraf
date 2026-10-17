@@ -18,9 +18,7 @@ export function PageHeader({
 		<div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
 			<div className="min-w-0">
 				<p className="island-kicker mb-2">{kicker}</p>
-				<h1 className="display-title text-3xl font-bold text-[var(--sea-ink)] sm:text-4xl">
-					{title}
-				</h1>
+				<h1 className="text-3xl font-bold text-[var(--sea-ink)]">{title}</h1>
 				{description && (
 					<p className="m-0 mt-1 max-w-2xl text-sm text-[var(--sea-ink-soft)] sm:text-base">
 						{description}
@@ -37,7 +35,7 @@ export function Panel({
 	className = "",
 }: { children: React.ReactNode; className?: string }) {
 	return (
-		<section className={`island-shell rounded-2xl p-4 sm:p-6 ${className}`}>{children}</section>
+		<section className={`island-shell rounded-lg p-4 sm:p-6 ${className}`}>{children}</section>
 	);
 }
 
