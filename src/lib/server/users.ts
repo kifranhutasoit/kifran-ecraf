@@ -4,10 +4,26 @@ import { z } from "zod";
 import { db, getUserRole, removeUserRole, setUserRole } from "@/lib/db";
 import { requireAdmin } from "@/lib/session";
 
+const userIdSchema = z.string().min(1, "Invalid user id").max(128, "Invalid user id");
+
 export const userRoleSchema = z.object({
-	userId: z.string(),
+	userId: userIdSchema,
 	role: z.enum(["admin", "user"]),
 });
+
+function httpError(message: string, status: number) {
+	return Object.assign(new Error(message), { status });
+}
+
+function countAdmins() {
+	return db.user.filter((u) => getUserRole(u.id) === "admin").length;
+}
+
+function purgeByUserId(list: unknown[], userId: string) {
+	for (let i = list.length - 1; i >= 0; i--) {
+		if ((list[i] as { userId?: string }).userId === userId) list.splice(i, 1);
+	}
+}
 
 export const getUsers = createServerFn({ method: "GET" }).handler(async () => {
 	await requireAdmin();
@@ -24,28 +40,47 @@ export const getUsers = createServerFn({ method: "GET" }).handler(async () => {
 export const updateUserRole = createServerFn({ method: "POST" })
 	.validator(userRoleSchema)
 	.handler(async ({ data }) => {
-		await requireAdmin();
-		setUserRole(data.userId, data.role);
+		const { user: actor } = await requireAdmin();
+
+		const target = db.user.find((u) => u.id === data.userId);
+		if (!target) throw httpError("User not found", 404);
+
+		const current = getUserRole(target.id);
+		if (current === data.role) return { ok: true };
+
+		// Admin tidak boleh menurunkan dirinya sendiri (mencegah salah klik / lockout).
+		if (actor.id === target.id && data.role !== "admin") {
+			throw httpError("You cannot remove your own admin role", 400);
+		}
+		// Selalu sisakan minimal satu admin.
+		if (current === "admin" && data.role !== "admin" && countAdmins() <= 1) {
+			throw httpError("Cannot demote the last administrator", 400);
+		}
+
+		setUserRole(target.id, data.role);
 		return { ok: true };
 	});
 
 export const deleteUser = createServerFn({ method: "POST" })
-	.validator(z.object({ userId: z.string() }))
+	.validator(z.object({ userId: userIdSchema }))
 	.handler(async ({ data }) => {
-		await requireAdmin();
-		// Prevent removing the last administrator so the app never locks itself out.
-		const role = getUserRole(data.userId);
-		if (role === "admin") {
-			const adminCount = db.userRole.filter((r) => r.role === "admin").length;
-			if (adminCount <= 1) {
-				const err = new Error("Cannot delete the last administrator") as Error & {
-					status?: number;
-				};
-				err.status = 400;
-				throw err;
-			}
+		const { user: actor } = await requireAdmin();
+
+		if (actor.id === data.userId) {
+			throw httpError("You cannot delete your own account", 400);
 		}
-		db.user = db.user.filter((u) => u.id !== data.userId);
+
+		const index = db.user.findIndex((u) => u.id === data.userId);
+		if (index === -1) throw httpError("User not found", 404);
+
+		if (getUserRole(data.userId) === "admin" && countAdmins() <= 1) {
+			throw httpError("Cannot delete the last administrator", 400);
+		}
+
+		db.user.splice(index, 1);
+		// Cabut semua sesi dan kredensial milik user itu supaya langsung tidak bisa masuk lagi.
+		purgeByUserId(db.session, data.userId);
+		purgeByUserId(db.account, data.userId);
 		removeUserRole(data.userId);
 		return { ok: true };
 	});

@@ -1,79 +1,90 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { auth } from "@/lib/auth";
-import { SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, db } from "@/lib/db";
+import {
+	type Product,
+	SEED_ADMIN_EMAIL,
+	SEED_ADMIN_PASSWORD,
+	db,
+	getUserRole,
+	setUserRole,
+} from "@/lib/db";
 import { getCurrentSession } from "@/lib/session";
 
 /**
- * Server-only session lookup. Safe to call from TanStack Router `beforeLoad`
- * (which runs on the client during client navigation) because server
- * functions always execute on the server.
+ * Server-only session lookup. Aman dipanggil dari `beforeLoad` karena server
+ * function selalu berjalan di server. Mengembalikan role dari store server,
+ * jadi client tidak bisa memalsukannya.
  */
 export const getServerSession = createServerFn({ method: "GET" }).handler(async () => {
-	return getCurrentSession();
+	const { session, user } = await getCurrentSession();
+	return {
+		session,
+		user,
+		role: user ? getUserRole(user.id) : null,
+	};
 });
 
-/**
- * One-time development seed: creates the administrator account (password
- * hashed by Better Auth) and seeds sample products. Idempotent.
- *
- * Called from the client via `useServerFn(seedAdmin)` on the /setup page.
- */
-export const seedAdmin = createServerFn({ method: "POST" }).handler(async () => {
-	const hasAdmin = db.user.some((u) => {
-		const role = db.userRole.find((r) => r.userId === u.id)?.role;
-		return role === "admin";
-	});
+type SeedResult = { ok: true; alreadySeeded: boolean; admin: string };
+
+const SAMPLE_PRODUCTS = [
+	{ name: "Starter Kit", description: "Everything you need to begin.", price: 49, stock: 12 },
+	{ name: "Pro Plan", description: "For growing teams.", price: 149, stock: 5 },
+	{ name: "Enterprise", description: "Self-hosted, full support.", price: 499, stock: 1 },
+];
+
+async function runSeed(): Promise<SeedResult> {
+	const hasAdmin = db.user.some((u) =>
+		db.userRole.some((r) => r.userId === u.id && r.role === "admin"),
+	);
 	if (hasAdmin) {
 		return { ok: true, alreadySeeded: true, admin: SEED_ADMIN_EMAIL };
 	}
 
+	// Sign-up publik terbuka. Kalau email seed sudah didaftarkan orang lain sebelum
+	// /setup dijalankan, JANGAN dipromosikan jadi admin (privilege escalation).
+	if (db.user.some((u) => u.email === SEED_ADMIN_EMAIL)) {
+		throw new Error(
+			`${SEED_ADMIN_EMAIL} is already registered without admin rights. Restart the dev server to reset the in-memory data, then run /setup again.`,
+		);
+	}
+
 	await auth.api.signUpEmail({
-		body: {
-			email: SEED_ADMIN_EMAIL,
-			password: SEED_ADMIN_PASSWORD,
-			name: "Administrator",
-		},
+		body: { email: SEED_ADMIN_EMAIL, password: SEED_ADMIN_PASSWORD, name: "Administrator" },
 		headers: new Headers(),
 	});
 
 	const adminUser = db.user.find((u) => u.email === SEED_ADMIN_EMAIL);
-	if (adminUser) {
-		const existing = db.userRole.find((r) => r.userId === adminUser.id);
-		if (existing) {
-			existing.role = "admin";
-		} else {
-			db.userRole.push({ userId: adminUser.id, role: "admin" });
-		}
+	if (!adminUser) {
+		throw new Error("Failed to create the admin account");
+	}
+	setUserRole(adminUser.id, "admin");
+
+	if (db.product.length === 0) {
+		const now = new Date().toISOString();
+		const products: Product[] = SAMPLE_PRODUCTS.map((p) => ({
+			id: crypto.randomUUID(),
+			...p,
+			image: null,
+			createdAt: now,
+			updatedAt: now,
+		}));
+		db.product.push(...products);
 	}
 
-	const now = new Date().toISOString();
-	const products = [
-		{
-			name: "Starter Kit",
-			description: "Everything you need to begin.",
-			price: 49,
-			stock: 12,
-		},
-		{
-			name: "Pro Plan",
-			description: "For growing teams.",
-			price: 149,
-			stock: 5,
-		},
-		{
-			name: "Enterprise",
-			description: "Self-hosted, full support.",
-			price: 499,
-			stock: 1,
-		},
-	].map((p) => ({
-		id: crypto.randomUUID(),
-		...p,
-		createdAt: now,
-		updatedAt: now,
-	}));
-	db.product.push(...products);
-
 	return { ok: true, alreadySeeded: false, admin: SEED_ADMIN_EMAIL };
+}
+
+// Satu proses seed bersama: klik ganda / dua request bersamaan tidak membuat race.
+let seeding: Promise<SeedResult> | null = null;
+
+/**
+ * Seed development satu kali (idempotent): akun admin + produk contoh.
+ * Dipanggil dari halaman /setup lewat `useServerFn(seedAdmin)`.
+ */
+export const seedAdmin = createServerFn({ method: "POST" }).handler(async () => {
+	seeding ??= runSeed().finally(() => {
+		seeding = null;
+	});
+	return seeding;
 });

@@ -1,8 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
-@plugin '@tailwindcss/typography';
-
 @import "tw-animate-css";
+
+/* FIX 1: semua @import harus di atas; @plugin dipindah ke bawahnya */
+@plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -167,7 +168,6 @@ body {
 	margin: 0;
 	color: var(--sea-ink);
 	font-family: var(--font-sans);
-	background-color: var(--bg-base);
 	background: radial-gradient(1100px 620px at -8% -10%, var(--hero-a), transparent 58%),
 		radial-gradient(1050px 620px at 112% -12%, var(--hero-b), transparent 62%),
 		radial-gradient(720px 380px at 50% 115%, rgba(79, 184, 178, 0.1), transparent 68%),
@@ -177,6 +177,9 @@ body {
 			var(--foam) 44%,
 			var(--bg-base) 100%
 		);
+	/* FIX 2: background-color harus SETELAH shorthand `background`,
+	   kalau tidak, shorthand akan mereset/menimpanya */
+	background-color: var(--bg-base);
 	overflow-x: hidden;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
