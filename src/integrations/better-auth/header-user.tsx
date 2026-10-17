@@ -8,11 +8,20 @@ export function UserAvatar({ name, email }: { name?: string | null; email?: stri
 	return (
 		<span
 			aria-hidden="true"
-			className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--chip-bg)] text-xs font-bold text-[var(--sea-ink)] ring-1 ring-[var(--chip-line)]"
+			className="inline-flex size-full shrink-0 items-center justify-center rounded-full bg-[var(--palm)] text-sm font-bold text-white"
 		>
 			{initial}
 		</span>
 	);
+}
+
+/** Ends the session, then reloads on /login so every server guard re-runs. */
+export async function signOutAndReload() {
+	try {
+		await authClient.signOut();
+	} finally {
+		window.location.assign("/login");
+	}
 }
 
 /** Sign-out button. Full reload afterwards so every server guard re-runs. */
@@ -24,11 +33,7 @@ export function SignOutButton({ className }: { className?: string }) {
 			disabled={busy}
 			onClick={async () => {
 				setBusy(true);
-				try {
-					await authClient.signOut();
-				} finally {
-					window.location.assign("/login");
-				}
+				await signOutAndReload();
 			}}
 			className={
 				className ??

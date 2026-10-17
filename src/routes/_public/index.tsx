@@ -30,12 +30,13 @@ function Home() {
 	const { data: session, isPending } = authClient.useSession();
 
 	return (
-		<main className="page-wrap px-4 py-14 sm:py-20">
+		<main className="hero-glow page-wrap px-4 py-14 sm:py-24">
 			<section className="grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center">
 				<div className="min-w-0">
 					<p className="island-kicker mb-3">Ekraf Dashboard</p>
 					<h1 className="display-title text-4xl leading-tight font-bold text-[var(--sea-ink)] sm:text-5xl">
-						Run your catalogue and team access from one secure place.
+						Run your catalogue and team access from one{" "}
+						<span className="text-[var(--palm)]">secure</span> place.
 					</h1>
 					<p className="mt-5 max-w-xl text-base leading-7 text-[var(--sea-ink-soft)]">
 						Manage products with images, stock and pricing, and control who can administer the app.
@@ -67,7 +68,7 @@ function Home() {
 					{FEATURES.map((feature) => {
 						const Icon = feature.icon;
 						return (
-							<li key={feature.title} className="island-shell flex gap-4 rounded-2xl p-5">
+							<li key={feature.title} className="island-shell flex gap-4 rounded-lg p-5">
 								<span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--palm)] text-white">
 									<Icon className="size-5" aria-hidden="true" />
 								</span>

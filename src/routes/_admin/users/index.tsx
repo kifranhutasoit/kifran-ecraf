@@ -168,16 +168,16 @@ function UsersPage() {
 				<EmptyState title="No users yet" />
 			) : (
 				<>
-					<div className="hidden overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] md:block">
+					<div className="hidden overflow-x-auto rounded-lg bg-[var(--surface-strong)] shadow-sm md:block">
 						<table className="w-full border-collapse text-sm">
-							<thead className="bg-[var(--chip-bg)]">
+							<thead className="bg-[var(--table-head)] text-[var(--table-head-fg)]">
 								{table.getHeaderGroups().map((headerGroup) => (
 									<tr key={headerGroup.id}>
 										{headerGroup.headers.map((header) => (
 											<th
 												key={header.id}
 												scope="col"
-												className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-[var(--sea-ink-soft)] uppercase"
+												className="px-4 py-3 text-left text-sm font-semibold uppercase"
 											>
 												{header.isPlaceholder
 													? null
@@ -191,7 +191,7 @@ function UsersPage() {
 								{table.getRowModel().rows.map((row) => (
 									<tr
 										key={row.id}
-										className="border-t border-[var(--line)] transition hover:bg-[var(--link-bg-hover)]"
+										className="transition even:bg-[var(--stripe)] hover:bg-[var(--link-bg-hover)]"
 									>
 										{row.getAllCells().map((cell) => (
 											<td key={cell.id} className="px-4 py-3 align-middle">
@@ -208,7 +208,7 @@ function UsersPage() {
 						{users.map((user) => {
 							const lock = lockFor(user);
 							return (
-								<li key={user.id} className="island-shell rounded-2xl p-4">
+								<li key={user.id} className="island-shell rounded-lg p-4">
 									<div className="flex items-start justify-between gap-3">
 										<div className="min-w-0">
 											<p className="m-0 truncate font-semibold text-[var(--sea-ink)]">

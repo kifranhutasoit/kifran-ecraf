@@ -1,6 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, Package, Plus, Users } from "lucide-react";
+import {
+	ArrowRight,
+	Boxes,
+	List,
+	type LucideIcon,
+	Package,
+	Plus,
+	ShieldCheck,
+	TriangleAlert,
+	Users,
+	Zap,
+} from "lucide-react";
+import type * as React from "react";
 
 import { ProductThumb } from "@/components/product-bits";
 import { EmptyState, ErrorState, PageHeader, Panel, SkeletonRows } from "@/components/states";
@@ -58,10 +70,11 @@ function Dashboard() {
 			/>
 
 			<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-				<Stat label="Products" value={productsQuery.data ? products.length : null} />
-				<Stat label="Units in stock" value={productsQuery.data ? totalStock : null} />
+				<Stat icon={Package} label="Products" value={productsQuery.data ? products.length : null} />
+				<Stat icon={Boxes} label="Units in stock" value={productsQuery.data ? totalStock : null} />
 				{isAdmin ? (
 					<Stat
+						icon={ShieldCheck}
 						label="Administrators"
 						value={usersQuery.data ? adminCount : null}
 						hint={
@@ -72,14 +85,14 @@ function Dashboard() {
 						error={usersQuery.isError}
 					/>
 				) : (
-					<Stat label="Your role" valueText="User" hint="Read-only access" />
+					<Stat icon={Users} label="Your role" valueText="User" hint="Read-only access" />
 				)}
 			</div>
 
-			<div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-				<Panel>
-					<div className="mb-4 flex items-center justify-between gap-3">
-						<h2 className="m-0 text-lg font-bold text-[var(--sea-ink)]">Recent products</h2>
+			<div className="mt-12 grid gap-12 lg:grid-cols-[1.4fr_1fr] lg:gap-6">
+				<section>
+					<div className="flex items-center justify-between gap-3 pb-3">
+						<SectionTitle icon={List}>Recent products</SectionTitle>
 						<Link
 							to="/products"
 							className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--sea-ink)] underline underline-offset-4"
@@ -90,56 +103,90 @@ function Dashboard() {
 					</div>
 
 					{productsQuery.isPending ? (
-						<SkeletonRows rows={4} />
+						<Panel>
+							<SkeletonRows rows={4} />
+						</Panel>
 					) : productsQuery.isError ? (
-						<ErrorState
-							message={`Could not load products. ${(productsQuery.error as Error).message}`}
-							onRetry={() => void productsQuery.refetch()}
-						/>
-					) : products.length === 0 ? (
-						<EmptyState
-							title="No products yet"
-							description={isAdmin ? "Add your first product to get started." : undefined}
-						/>
-					) : (
-						<ul className="divide-y divide-[var(--line)]">
-							{products.slice(0, 5).map((p) => (
-								<li key={p.id} className="flex items-center gap-3 py-3">
-									<ProductThumb src={p.imageUrl} size="size-10" />
-									<div className="min-w-0 flex-1">
-										<p className="m-0 truncate text-sm font-semibold text-[var(--sea-ink)]">
-											{p.name}
-										</p>
-										<p className="m-0 text-xs text-[var(--sea-ink-soft)]">Stock {p.stock}</p>
-									</div>
-									<p className="m-0 shrink-0 text-sm font-semibold text-[var(--sea-ink)]">
-										{formatPrice(p.price)}
-									</p>
-								</li>
-							))}
-						</ul>
-					)}
-				</Panel>
-
-				<Panel>
-					<h2 className="m-0 mb-4 text-lg font-bold text-[var(--sea-ink)]">Shortcuts</h2>
-					<div className="grid gap-3">
-						<ShortcutLink
-							to="/products"
-							icon={Package}
-							title="Products"
-							body="Browse, sort and manage the catalogue."
-						/>
-						{isAdmin && (
-							<ShortcutLink
-								to="/users"
-								icon={Users}
-								title="Users"
-								body="Change roles and remove accounts."
+						<Panel>
+							<ErrorState
+								message={`Could not load products. ${(productsQuery.error as Error).message}`}
+								onRetry={() => void productsQuery.refetch()}
 							/>
-						)}
+						</Panel>
+					) : products.length === 0 ? (
+						<Panel>
+							<EmptyState
+								title="No products yet"
+								description={isAdmin ? "Add your first product to get started." : undefined}
+							/>
+						</Panel>
+					) : (
+						<div className="overflow-x-auto rounded-lg bg-[var(--surface-strong)] shadow-sm">
+							<table className="w-full border-collapse text-sm">
+								<thead className="bg-[var(--table-head)] text-[var(--table-head-fg)]">
+									<tr>
+										<th scope="col" className="px-4 py-3 text-left text-sm font-semibold uppercase">
+											Product
+										</th>
+										<th scope="col" className="px-4 py-3 text-left text-sm font-semibold uppercase">
+											Stock
+										</th>
+										<th
+											scope="col"
+											className="px-4 py-3 text-right text-sm font-semibold uppercase"
+										>
+											Price
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									{products.slice(0, 5).map((p) => (
+										<tr key={p.id} className="even:bg-[var(--stripe)]">
+											<td className="px-4 py-3">
+												<div className="flex min-w-0 items-center gap-3">
+													<ProductThumb src={p.imageUrl} size="size-10" />
+													<span className="truncate font-semibold text-[var(--sea-ink)]">
+														{p.name}
+													</span>
+												</div>
+											</td>
+											<td className="px-4 py-3 text-[var(--sea-ink-soft)]">{p.stock}</td>
+											<td className="px-4 py-3 text-right font-semibold text-[var(--sea-ink)]">
+												{formatPrice(p.price)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+				</section>
+
+				<section>
+					<div className="pb-3">
+						<SectionTitle icon={Zap}>Shortcuts</SectionTitle>
 					</div>
-				</Panel>
+					<Panel>
+						<div className="grid gap-3">
+							<ShortcutLink
+								to="/products"
+								icon={Package}
+								title="Products"
+								body="Browse, sort and manage the catalogue."
+							/>
+							{isAdmin && (
+								<ShortcutLink
+									to="/users"
+									icon={Users}
+									title="Users"
+									body="Change roles and remove accounts."
+								/>
+							)}
+						</div>
+					</Panel>
+
+					{products.length > 0 && <StockLevels products={products} />}
+				</section>
 			</div>
 
 			{usersQuery.isError && isAdmin && (
@@ -151,13 +198,76 @@ function Dashboard() {
 	);
 }
 
+const LOW_STOCK = 5;
+
+/** Plain-CSS bar list: products with the most stock first, low stock flagged. */
+function StockLevels({ products }: { products: { id: string; name: string; stock: number }[] }) {
+	const top = [...products].sort((a, b) => b.stock - a.stock).slice(0, 5);
+	const max = Math.max(1, ...top.map((p) => p.stock));
+	const low = products.filter((p) => p.stock <= LOW_STOCK).length;
+	return (
+		<div className="mt-6">
+			<div className="pb-3">
+				<SectionTitle icon={Boxes}>Stock levels</SectionTitle>
+			</div>
+			<Panel>
+				<ul className="m-0 grid list-none gap-4 p-0">
+					{top.map((p) => (
+						<li key={p.id}>
+							<div className="mb-1 flex items-center justify-between gap-3 text-sm">
+								<span className="truncate font-semibold text-[var(--sea-ink)]">{p.name}</span>
+								<span className="shrink-0 text-[var(--sea-ink-soft)]">
+									{p.stock.toLocaleString()}
+								</span>
+							</div>
+							<div className="h-2.5 overflow-hidden rounded-full bg-[var(--chip-bg)]">
+								<div
+									className={
+										p.stock <= LOW_STOCK
+											? "h-full rounded-full bg-amber-500"
+											: "h-full rounded-full bg-[var(--palm)]"
+									}
+									style={{ width: `${Math.max(3, (p.stock / max) * 100)}%` }}
+								/>
+							</div>
+						</li>
+					))}
+				</ul>
+				{low > 0 && (
+					<p className="m-0 mt-4 flex items-center gap-2 text-sm text-[var(--sea-ink-soft)]">
+						<TriangleAlert className="size-4 text-amber-500" aria-hidden="true" />
+						{low} {low === 1 ? "product has" : "products have"} {LOW_STOCK} or fewer units left.
+					</p>
+				)}
+			</Panel>
+		</div>
+	);
+}
+
+function SectionTitle({
+	icon: Icon,
+	children,
+}: {
+	icon: LucideIcon;
+	children: React.ReactNode;
+}) {
+	return (
+		<h2 className="m-0 flex items-center text-xl font-normal text-[var(--sea-ink)]">
+			<Icon className="mr-3 size-5" aria-hidden="true" />
+			{children}
+		</h2>
+	);
+}
+
 function Stat({
+	icon: Icon,
 	label,
 	value,
 	valueText,
 	hint,
 	error,
 }: {
+	icon: LucideIcon;
 	label: string;
 	value?: number | null;
 	valueText?: string;
@@ -166,20 +276,25 @@ function Stat({
 }) {
 	const loading = valueText === undefined && (value === null || value === undefined) && !error;
 	return (
-		<div className="island-shell rounded-2xl p-5">
-			<p className="m-0 text-sm font-medium text-[var(--sea-ink-soft)]">{label}</p>
-			{loading ? (
-				<span
-					role="status"
-					aria-label="Loading"
-					className="mt-3 block h-8 w-20 animate-pulse rounded-md bg-[var(--chip-bg)]"
-				/>
-			) : (
-				<p className="m-0 mt-2 text-3xl font-bold text-[var(--sea-ink)]">
-					{error ? "!" : (valueText ?? value?.toLocaleString())}
-				</p>
-			)}
-			{hint && <p className="m-0 mt-1 text-xs text-[var(--sea-ink-soft)]">{hint}</p>}
+		<div className="island-shell flex items-center gap-4 rounded-lg p-5">
+			<span className="flex size-12 shrink-0 items-center justify-center rounded-tr-lg rounded-br-lg rounded-bl-lg bg-[var(--palm)] text-white shadow-md">
+				<Icon className="size-6" aria-hidden="true" />
+			</span>
+			<div className="min-w-0">
+				<p className="m-0 text-sm font-medium text-[var(--sea-ink-soft)]">{label}</p>
+				{loading ? (
+					<span
+						role="status"
+						aria-label="Loading"
+						className="mt-2 block h-8 w-20 animate-pulse rounded-md bg-[var(--chip-bg)]"
+					/>
+				) : (
+					<p className="m-0 mt-1 text-3xl font-bold text-[var(--sea-ink)]">
+						{error ? "!" : (valueText ?? value?.toLocaleString())}
+					</p>
+				)}
+				{hint && <p className="m-0 mt-1 text-xs text-[var(--sea-ink-soft)]">{hint}</p>}
+			</div>
 		</div>
 	);
 }
@@ -198,7 +313,7 @@ function ShortcutLink({
 	return (
 		<Link
 			to={to}
-			className="group flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-4 no-underline transition hover:-translate-y-0.5 hover:border-[var(--chip-line)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+			className="group flex items-center gap-4 rounded-xl border border-[var(--line)] bg-[var(--chip-bg)] p-4 no-underline transition hover:border-[var(--palm)] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 		>
 			<span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--palm)] text-white">
 				<Icon className="size-5" aria-hidden="true" />

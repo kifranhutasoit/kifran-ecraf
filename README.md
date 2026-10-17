@@ -32,3 +32,7 @@ Then open `/setup`, create the administrator, and sign in at `/login`.
 ## Deploying
 
 Set `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET` and `SEED_ADMIN_PASSWORD` in the hosting provider. The app is configured for Vercel (`vercel.json`). Data is in memory, so it resets on each cold start (see `AGENTS.md`).
+
+## Design
+
+The UI follows the [Tailwind Admin Template](https://github.com/davidgrzyb/tailwind-admin-template) by David Grzyb (Apache License 2.0): emerald-green sidebar (`#047857`, active `#065f46`), green-tinted canvas, white cards, deep-green striped tables, Karla font. The palette lives in `src/styles.css` (light and dark variants); the layout is in `src/components/AdminShell.tsx`.

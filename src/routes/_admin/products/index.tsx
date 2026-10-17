@@ -193,9 +193,9 @@ function ProductsPage() {
 			) : (
 				<>
 					{/* Desktop: sortable table */}
-					<div className="hidden overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] md:block">
+					<div className="hidden overflow-x-auto rounded-lg bg-[var(--surface-strong)] shadow-sm md:block">
 						<table className="w-full border-collapse text-sm">
-							<thead className="bg-[var(--chip-bg)]">
+							<thead className="bg-[var(--table-head)] text-[var(--table-head-fg)]">
 								{table.getHeaderGroups().map((headerGroup) => (
 									<tr key={headerGroup.id}>
 										{headerGroup.headers.map((header) => {
@@ -211,13 +211,13 @@ function ProductsPage() {
 																? "descending"
 																: undefined
 													}
-													className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-[var(--sea-ink-soft)] uppercase"
+													className="px-4 py-3 text-left text-sm font-semibold uppercase"
 												>
 													{header.isPlaceholder ? null : header.column.getCanSort() ? (
 														<button
 															type="button"
 															onClick={header.column.getToggleSortingHandler()}
-															className="inline-flex items-center gap-1 rounded outline-none hover:text-[var(--sea-ink)] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+															className="inline-flex items-center gap-1 rounded outline-none hover:text-gray-300 focus-visible:ring-[3px] focus-visible:ring-white/60"
 														>
 															{flexRender(header.column.columnDef.header, header.getContext())}
 															{sorted === "asc" ? (
@@ -241,7 +241,7 @@ function ProductsPage() {
 								{table.getRowModel().rows.map((row) => (
 									<tr
 										key={row.id}
-										className="border-t border-[var(--line)] transition hover:bg-[var(--link-bg-hover)]"
+										className="transition even:bg-[var(--stripe)] hover:bg-[var(--link-bg-hover)]"
 									>
 										{row.getAllCells().map((cell) => (
 											<td key={cell.id} className="px-4 py-3 align-middle">
@@ -259,7 +259,7 @@ function ProductsPage() {
 						{table.getRowModel().rows.map((row) => {
 							const p = row.original;
 							return (
-								<li key={row.id} className="island-shell rounded-2xl p-4">
+								<li key={row.id} className="island-shell rounded-lg p-4">
 									<div className="flex items-start gap-3">
 										<ProductThumb src={p.imageUrl} size="size-14" />
 										<div className="min-w-0 flex-1">
