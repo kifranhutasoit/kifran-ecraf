@@ -1,0 +1,2 @@
+﻿src/routes/_admin.tsx(8,17): error TS2339: Property 'role' does not exist on type '{ session: { id: string; createdAt: Date; updatedAt: Date; userId: string; expiresAt: Date; token: string; ipAddress?: string | null | undefined; userAgent?: string | null | undefined; } | null; user: { ...; } | null; }'.
+src/routes/_admin/dashboard.tsx(12,22): error TS2322: Type '"/demo/better-auth"' is not assignable to type '"/" | "." | ".." | "/login" | "/setup" | "/dashboard" | "/api/auth/$" | "/products" | "/users"'.
